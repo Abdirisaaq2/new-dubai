@@ -24,3 +24,116 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+@media (max-width: 1024px) {
+  [style*="grid-template-columns: repeat(6"],
+  [style*="grid-template-columns: repeat(5"],
+  [style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  [style*="grid-template-columns: 390px"],
+  [style*="grid-template-columns: 380px"],
+  [style*="grid-template-columns: 340px"],
+  [style*="grid-template-columns: minmax(0px, 1fr) 360px"],
+  [style*="grid-template-columns: minmax(0, 1fr) 360px"],
+  [style*="grid-template-columns: minmax(0px, 1fr) 340px"],
+  [style*="grid-template-columns: minmax(0, 1fr) 340px"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [style*="display: flex"][style*="align-items: flex-start"]:has(.admin-sidebar) {
+    flex-direction: column !important;
+  }
+
+  [style*="min-width: 320px"],
+  [style*="min-width: 330px"] {
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  [style*="padding: 22px"],
+  [style*="padding: 24px"],
+  [style*="padding: 26px"] {
+    padding: 16px !important;
+  }
+
+  [style*="border-radius: 28px"],
+  [style*="border-radius: 26px"],
+  [style*="border-radius: 24px"] {
+    border-radius: 18px !important;
+  }
+
+  [style*="display: flex"][style*="justify-content: space-between"] {
+    flex-wrap: wrap !important;
+  }
+
+  [style*="grid-template-columns: repeat(2"],
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns: 78px"],
+  [style*="grid-template-columns: 120px"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [style*="position: sticky"] {
+    position: static !important;
+  }
+
+  [style*="font-size: 36px"],
+  [style*="font-size: 34px"] {
+    font-size: 28px !important;
+    line-height: 1.15 !important;
+  }
+
+  [style*="font-size: 30px"],
+  [style*="font-size: 28px"] {
+    font-size: 24px !important;
+    line-height: 1.2 !important;
+  }
+
+  [style*="width: 120px"][style*="height: 120px"],
+  [style*="width: 190px"][style*="height: 190px"] {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  [style*="grid-template-columns: repeat(auto-fit, minmax(320px"],
+  [style*="grid-template-columns: repeat(auto-fit, minmax(310px"],
+  [style*="grid-template-columns: repeat(auto-fit, minmax(290px"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [style*="padding: 18px"],
+  [style*="padding: 20px"] {
+    padding: 14px !important;
+  }
+}
