@@ -62,23 +62,23 @@ export default function ProductsPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, price, category, stock, image_url, created_at")
-        .order("created_at", { ascending: false });
+      const response = await fetch("/api/admin/products");
+      const result = await response.json().catch(() => ({}));
 
-      if (error) {
+      if (!response.ok) {
+        const error = new Error(result.error || "Products lama soo qaadi karin.");
+        error.status = response.status;
         const handled = await handleSessionExpiry(error, router);
         if (!handled) {
           console.log(error);
-          setMessage("Products lama soo qaadi karin.");
+          setMessage(error.message || "Products lama soo qaadi karin.");
         }
         setLoading(false);
         setRefreshing(false);
         return;
       }
 
-      setProducts(data || []);
+      setProducts(result.products || []);
       setLoading(false);
       setRefreshing(false);
     },
@@ -128,10 +128,50 @@ export default function ProductsPage() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(result.error || "Image upload ma shaqayn.");
+      const error = new Error(result.error || "Image upload ma shaqayn.");
+      error.status = response.status;
+      throw error;
     }
 
     return result.url;
+  }
+
+  async function saveProductToServer(payload, id = null) {
+    const response = await fetch("/api/admin/products", {
+      method: id ? "PATCH" : "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(id ? { id, ...payload } : payload),
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const error = new Error(result.error || "Product save ma shaqayn.");
+      error.status = response.status;
+      throw error;
+    }
+
+    return result.product;
+  }
+
+  async function deleteProductFromServer(id) {
+    const response = await fetch("/api/admin/products", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const error = new Error(result.error || "Delete ma shaqayn.");
+      error.status = response.status;
+      throw error;
+    }
   }
 
   async function saveProduct(e) {
@@ -180,27 +220,22 @@ export default function ProductsPage() {
         )
       );
 
-      const { data, error } = await supabase
-        .from("products")
-        .update(payload)
-        .eq("id", editingId)
-        .select()
-        .single();
+      try {
+        const data = await saveProductToServer(payload, editingId);
 
-      if (error) {
-        setProducts(previousProducts);
-        const handled = await handleSessionExpiry(error, router);
-        if (!handled) {
-          console.log(error);
-          setMessage("Update ma shaqayn. Hubi columns-ka products table.");
-        }
-      } else {
         setProducts((prev) =>
           prev.map((product) => (product.id === editingId ? data : product))
         );
         setMessage("Product si dhab ah ayaa loo update gareeyay.");
         showToast("Product updated.");
         clearForm();
+      } catch (error) {
+        setProducts(previousProducts);
+        const handled = await handleSessionExpiry(error, router);
+        if (!handled) {
+          console.log(error);
+          setMessage(error.message || "Update ma shaqayn.");
+        }
       }
     } else {
       const tempId = `temp-${Date.now()}`;
@@ -211,27 +246,23 @@ export default function ProductsPage() {
       };
 
       setProducts((prev) => [optimisticProduct, ...prev]);
-      clearForm();
 
-      const { data, error } = await supabase
-        .from("products")
-        .insert([payload])
-        .select()
-        .single();
+      try {
+        const data = await saveProductToServer(payload);
 
-      if (error) {
-        setProducts((prev) => prev.filter((product) => product.id !== tempId));
-        const handled = await handleSessionExpiry(error, router);
-        if (!handled) {
-          console.log(error);
-          setMessage("Database error. Hubi columns-ka products table.");
-        }
-      } else {
         setProducts((prev) =>
           prev.map((product) => (product.id === tempId ? data : product))
         );
         setMessage("Product waa la daray.");
         showToast("Product added.");
+        clearForm();
+      } catch (error) {
+        setProducts((prev) => prev.filter((product) => product.id !== tempId));
+        const handled = await handleSessionExpiry(error, router);
+        if (!handled) {
+          console.log(error);
+          setMessage(error.message || "Database error. Hubi products table.");
+        }
       }
     }
 
@@ -252,14 +283,14 @@ export default function ProductsPage() {
     const previousProducts = products;
     setProducts((prev) => prev.filter((p) => p.id !== id));
 
-    const { error } = await supabase.from("products").delete().eq("id", id);
-
-    if (error) {
+    try {
+      await deleteProductFromServer(id);
+    } catch (error) {
       setProducts(previousProducts);
       const handled = await handleSessionExpiry(error, router);
       if (!handled) {
         console.log(error);
-        setMessage("Delete ma shaqayn.");
+        setMessage(error.message || "Delete ma shaqayn.");
       }
       return;
     }
