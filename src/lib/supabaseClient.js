@@ -8,7 +8,7 @@ export function createClient() {
     {
       cookieOptions: supabaseCookieOptions,
       auth: {
-        autoRefreshToken: false,
+        autoRefreshToken: true,
       },
     }
   );

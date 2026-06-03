@@ -47,7 +47,7 @@ export default async function OrdersPage() {
   }
 
   return (
-    <main style={styles.page}>
+    <main className="orders-page responsive-shop-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.smallTitle}>NEW DUBAI CUSTOMER</p>

@@ -79,7 +79,7 @@ export default function CheckoutPage() {
 
     const { data: productsData } = await supabase
       .from("products")
-      .select("id, name, price, category, image_url")
+      .select("id, name, price, category, image_url, stock")
       .in("id", productIds);
 
     const productMap = new Map(
@@ -95,6 +95,7 @@ export default function CheckoutPage() {
         category: product?.category || "",
         price: Number(product?.price || 0),
         image_url: product?.image_url || "/images/t-shirts.jpg",
+        stock: Number(product?.stock ?? 0),
       };
     });
 
@@ -165,94 +166,23 @@ export default function CheckoutPage() {
 
     setPlacingOrder(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      showToast("Login ayaa loo baahan yahay.", "error");
-      setPlacingOrder(false);
-      return;
-    }
-
-    const invoiceNo = `INV-${Date.now()}`;
-
-    const { error: paymentError } = await supabase.from("payments").insert({
-      user_id: user.id,
-      order_invoice_no: invoiceNo,
-      customer_name: form.fullName,
-      customer_phone: form.phone,
-      payment_method: form.paymentMethod,
-      amount: total,
-      transaction_ref: form.transactionRef,
-      payment_status: "Paid",
+    const response = await fetch("/api/checkout/place-order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ form }),
     });
 
-    if (paymentError) {
-      showToast(paymentError.message, "error");
+    const result = await response.json();
+
+    if (!response.ok) {
+      showToast(result.error || "Order lama dhigi karin.", "error");
       setPlacingOrder(false);
       return;
     }
 
-    const { data: orderData, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        user_id: user.id,
-        invoice_no: invoiceNo,
-        customer_name: form.fullName,
-        customer_phone: form.phone,
-        total_amount: total,
-        payment_method: form.paymentMethod,
-        payment_status: "Paid",
-        order_status: "Pending",
-      })
-      .select()
-      .single();
-
-    if (orderError) {
-      showToast(orderError.message, "error");
-      setPlacingOrder(false);
-      return;
-    }
-
-    const orderItemsPayload = cartItems.map((item) => ({
-      order_id: orderData.id,
-      product_id: item.product_id,
-      product_name: item.product_name,
-      color: item.color,
-      quantity: Number(item.quantity || 0),
-      unit_price: Number(item.price || 0),
-      total_price: Number(item.price || 0) * Number(item.quantity || 0),
-    }));
-
-    const { error: orderItemsError } = await supabase
-      .from("order_items")
-      .insert(orderItemsPayload);
-
-    if (orderItemsError) {
-      showToast(orderItemsError.message, "error");
-      setPlacingOrder(false);
-      return;
-    }
-
-    const { error: cartDeleteError } = await supabase
-      .from("cart_items")
-      .delete()
-      .eq("user_id", user.id);
-
-    if (cartDeleteError) {
-      showToast(cartDeleteError.message, "error");
-      setPlacingOrder(false);
-      return;
-    }
-
-    setSuccessData({
-      invoiceNo,
-      transactionRef: form.transactionRef,
-      amount: total,
-      paymentMethod: form.paymentMethod,
-      fullName: form.fullName,
-    });
+    setSuccessData(result);
 
     setCartItems([]);
     showToast("Order placed successfully.");
@@ -499,13 +429,17 @@ export default function CheckoutPage() {
             </div>
           </form>
 
-          <div style={summaryStyles.wrapper}>
-            <div style={summaryStyles.card}>
+          <div className="checkout-summary" style={summaryStyles.wrapper}>
+            <div className="checkout-summary-card" style={summaryStyles.card}>
               <h2 style={summaryStyles.title}>Order Summary</h2>
 
               <div style={summaryStyles.itemsList}>
                 {cartItems.map((item) => (
-                  <div key={item.id} style={summaryStyles.itemCard}>
+                  <div
+                    key={item.id}
+                    className="checkout-summary-item"
+                    style={summaryStyles.itemCard}
+                  >
                     <div style={summaryStyles.imageBox}>
                       <img
                         src={item.image_url || "/images/t-shirts.jpg"}
@@ -517,7 +451,8 @@ export default function CheckoutPage() {
                     <div style={summaryStyles.itemInfo}>
                       <p style={summaryStyles.itemName}>{item.product_name}</p>
                       <p style={summaryStyles.itemMeta}>
-                        {item.color ? `${item.color} · ` : ""}Qty{" "}
+                        {item.color ? `${item.color} · ` : ""}
+                        {item.size ? `${item.size} · ` : ""}Qty{" "}
                         {item.quantity}
                       </p>
                     </div>

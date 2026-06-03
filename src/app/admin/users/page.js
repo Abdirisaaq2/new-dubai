@@ -14,6 +14,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import { createClient } from "@/lib/supabaseServer";
+import { createAdminClient } from "@/lib/supabaseAdmin";
 
 const MAIN_ADMIN_EMAIL = "carwonewdubai20@gmail.com";
 
@@ -23,7 +24,6 @@ async function updateUser(formData) {
   const userId = formData.get("userId");
   const role = formData.get("role");
   const status = formData.get("status");
-  const canManageUsersValue = formData.get("canManageUsers");
 
   if (!userId || !role || !status) return;
 
@@ -37,7 +37,7 @@ async function updateUser(formData) {
 
   const { data: adminProfile } = await supabase
     .from("profiles")
-    .select("id, email, role, status, can_manage_users")
+    .select("id, email, role, status")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -51,27 +51,31 @@ async function updateUser(formData) {
 
   const currentEmail = String(adminProfile.email || "").toLowerCase();
   const isMainAdmin = currentEmail === MAIN_ADMIN_EMAIL.toLowerCase();
-  const currentAdminCanManage = Boolean(adminProfile.can_manage_users);
 
-  /*
-    Main admin ama admin Actions Access leh ayaa update samayn kara.
-  */
-  if (!isMainAdmin && !currentAdminCanManage) {
-    console.log("Permission denied: this admin has no Actions Access.");
+  if (!isMainAdmin) {
+    console.log("Permission denied: only main admin can update users.");
     return;
   }
 
-  const { data: targetUser, error: targetError } = await supabase
+  const supabaseAdmin = createAdminClient();
+  const { data: targetUser, error: targetError } = await supabaseAdmin
     .from("profiles")
-    .select("id, email, role, status, can_manage_users")
+    .select("id, username, email, phone, gender, role, status")
     .eq("id", userId)
     .maybeSingle();
 
-  if (targetError || !targetUser) return;
+  if (targetError) return;
 
-  const targetEmail = String(targetUser.email || "").toLowerCase();
+  const { data: authUserData } = await supabaseAdmin.auth.admin.getUserById(
+    String(userId)
+  );
+  const authUser = authUserData?.user;
+
+  if (!targetUser && !authUser) return;
+
+  const targetEmail = String(targetUser?.email || authUser?.email || "").toLowerCase();
   const targetIsMainAdmin = targetEmail === MAIN_ADMIN_EMAIL.toLowerCase();
-  const targetIsCurrentAdmin = targetUser.id === adminProfile.id;
+  const targetIsCurrentAdmin = String(userId) === adminProfile.id;
 
   /*
     Admin kasta naftiisa ma beddeli karo.
@@ -81,31 +85,28 @@ async function updateUser(formData) {
     return;
   }
 
-  /*
-    Admin kale main admin ma beddeli karo.
-  */
-  if (!isMainAdmin && targetIsMainAdmin) {
-    console.log("Permission denied: delegated admins cannot update main admin.");
+  if (targetIsMainAdmin) {
+    console.log("Permission denied: main admin account is protected.");
     return;
   }
 
   const payload = {
+    id: String(userId),
+    username:
+      targetUser?.username ||
+      authUser?.user_metadata?.username ||
+      authUser?.email?.split("@")[0] ||
+      "",
+    email: targetUser?.email || authUser?.email || "",
+    phone: targetUser?.phone || authUser?.user_metadata?.phone || "",
+    gender: targetUser?.gender || authUser?.user_metadata?.gender || "",
     role,
     status,
   };
 
-  /*
-    Actions Access allowed/locked waxaa beddeli kara main admin kaliya.
-    Admin kale role/status kaliya ayuu beddeli karaa.
-  */
-  if (isMainAdmin && canManageUsersValue !== null) {
-    payload.can_manage_users = canManageUsersValue === "true";
-  }
-
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("profiles")
-    .update(payload)
-    .eq("id", userId);
+    .upsert(payload, { onConflict: "id" });
 
   if (error) {
     console.log("Update user error:", error.message);
@@ -186,7 +187,7 @@ export default async function AdminUsersPage() {
 
   const { data: adminProfile } = await supabase
     .from("profiles")
-    .select("id, username, email, role, status, can_manage_users")
+    .select("id, username, email, role, status")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -200,22 +201,31 @@ export default async function AdminUsersPage() {
 
   const currentEmail = String(adminProfile.email || "").toLowerCase();
   const isMainAdmin = currentEmail === MAIN_ADMIN_EMAIL.toLowerCase();
-  const currentAdminCanManage =
-    isMainAdmin || Boolean(adminProfile.can_manage_users);
+  const currentAdminCanManage = isMainAdmin;
 
-  const { data: users, error } = await supabase
+  const supabaseAdmin = createAdminClient();
+
+  const { data: profiles, error } = await supabaseAdmin
     .from("profiles")
     .select(
-      "id, username, email, phone, gender, role, status, can_manage_users, created_at"
+      "id, username, email, phone, gender, role, status, created_at"
     )
     .order("created_at", { ascending: false });
 
-  if (error) {
+  const { data: authUsersData, error: authUsersError } =
+    await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+
+  if (error || authUsersError) {
     return (
-      <main style={styles.page}>
+      <main className="admin-users-page responsive-admin-page" style={styles.page}>
         <section style={styles.errorBox}>
           <h1 style={styles.errorTitle}>Failed to load users</h1>
-          <p style={styles.errorText}>{error.message}</p>
+          <p style={styles.errorText}>
+            {error?.message || authUsersError?.message}
+          </p>
           <Link href="/admin" style={styles.backHome}>
             <ArrowLeft size={18} />
             Back Home
@@ -225,7 +235,37 @@ export default async function AdminUsersPage() {
     );
   }
 
-  const allUsers = users || [];
+  const profilesById = new Map((profiles || []).map((item) => [item.id, item]));
+  const profileOnlyUsers = (profiles || []).filter(
+    (profile) => !authUsersData?.users?.some((authUser) => authUser.id === profile.id)
+  );
+
+  const authUsers = (authUsersData?.users || []).map((authUser) => {
+    const profile = profilesById.get(authUser.id);
+    const metadata = authUser.user_metadata || {};
+
+    return {
+      id: authUser.id,
+      username:
+        profile?.username ||
+        metadata.username ||
+        authUser.email?.split("@")[0] ||
+        "Unknown User",
+      email: profile?.email || authUser.email || "",
+      phone: profile?.phone || metadata.phone || authUser.phone || "",
+      gender: profile?.gender || metadata.gender || "",
+      role: profile?.role || metadata.role || "user",
+      status: profile?.status || metadata.status || "active",
+      can_manage_users: false,
+      created_at: profile?.created_at || authUser.created_at,
+    };
+  });
+
+  const allUsers = [...authUsers, ...profileOnlyUsers].sort((a, b) => {
+    const bTime = new Date(b?.created_at || 0).getTime();
+    const aTime = new Date(a?.created_at || 0).getTime();
+    return bTime - aTime;
+  });
 
   const totalUsers = allUsers.length;
   const adminUsers = allUsers.filter((item) => item.role === "admin").length;
@@ -239,12 +279,11 @@ export default async function AdminUsersPage() {
   const actionAdmins = allUsers.filter(
     (item) =>
       item.role === "admin" &&
-      (item.can_manage_users ||
-        String(item.email || "").toLowerCase() === MAIN_ADMIN_EMAIL.toLowerCase())
+      String(item.email || "").toLowerCase() === MAIN_ADMIN_EMAIL.toLowerCase()
   ).length;
 
   return (
-    <main style={styles.page}>
+    <main className="admin-users-page responsive-admin-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.badgeTop}>NEW DUBAI ADMIN SYSTEM</p>
@@ -292,10 +331,8 @@ export default async function AdminUsersPage() {
           <div>
             <h3 style={styles.noticeTitle}>Main admin control enabled</h3>
             <p style={styles.noticeText}>
-              You can give another admin Actions Access by changing{" "}
-              <strong>Actions Access</strong> to <strong>Allowed</strong>. You can
-              remove it again by changing it to <strong>Locked</strong>. Your own
-              main admin row is protected.
+              You can update other accounts&apos; role and status. Your own main
+              admin row is protected.
             </p>
           </div>
         </section>
@@ -312,14 +349,14 @@ export default async function AdminUsersPage() {
             </h3>
             <p style={styles.noticeText}>
               {currentAdminCanManage
-                ? "Main admin allowed this account to use Actions. You cannot update yourself, the main admin, or grant Actions Access to others."
-                : `Actions are locked. Only ${MAIN_ADMIN_EMAIL} can grant or revoke Actions Access.`}
+                ? "You can update role/status for other users."
+                : `Actions are locked. Only ${MAIN_ADMIN_EMAIL} can update users.`}
             </p>
           </div>
         </section>
       )}
 
-      <section style={styles.statsGrid}>
+      <section className="responsive-stats-grid" style={styles.statsGrid}>
         <StatCard
           dark
           icon={<Users size={24} />}
@@ -375,7 +412,7 @@ export default async function AdminUsersPage() {
             </p>
           </div>
         ) : (
-          <div style={styles.tableWrap}>
+          <div className="responsive-table-wrap" style={styles.tableWrap}>
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -406,19 +443,13 @@ export default async function AdminUsersPage() {
                     - qof kasta oo kale wuu edit-gareyn karaa
                     - naftiisa ma edit-gareyn karo
 
-                    Delegated admin:
-                    - qof kasta oo kale wuu edit-gareyn karaa haddii allowed yahay
-                    - naftiisa ma edit-gareyn karo
-                    - main admin ma edit-gareyn karo
+                    Other admins:
+                    - users/admins way arki karaan
+                    - update waxa sameyn kara main admin kaliya
                   */
                   const canEditThisRow = isMainAdmin
                     ? !rowIsCurrentAdmin
-                    : currentAdminCanManage &&
-                      !rowIsMainAdmin &&
-                      !rowIsCurrentAdmin;
-
-                  const canEditActionsAccess =
-                    isMainAdmin && !rowIsMainAdmin && !rowIsCurrentAdmin;
+                    : false;
 
                   return (
                     <tr
@@ -525,33 +556,6 @@ export default async function AdminUsersPage() {
                             <option value="active">active</option>
                             <option value="blocked">blocked</option>
                           </select>
-
-                          {isMainAdmin ? (
-                            <select
-                              name="canManageUsers"
-                              defaultValue={
-                                rowIsMainAdmin || item.can_manage_users
-                                  ? "true"
-                                  : "false"
-                              }
-                              disabled={!canEditActionsAccess}
-                              style={{
-                                ...styles.select,
-                                ...(!canEditActionsAccess
-                                  ? styles.disabledSelect
-                                  : {}),
-                              }}
-                            >
-                              <option value="false">locked</option>
-                              <option value="true">allowed</option>
-                            </select>
-                          ) : (
-                            <input
-                              type="hidden"
-                              name="canManageUsers"
-                              value={item.can_manage_users ? "true" : "false"}
-                            />
-                          )}
 
                           <button
                             type="submit"

@@ -11,7 +11,6 @@ import {
   DollarSign,
   ReceiptText,
   PackageCheck,
-  ExternalLink,
   AlertTriangle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabaseServer";
@@ -58,7 +57,37 @@ function StatusBadge({ status }) {
   );
 }
 
-export default async function AdminOrdersPage() {
+function compactDuplicateCheckoutAttempts(orders) {
+  const latestByKey = new Map();
+  const visibleOrders = [];
+  const duplicateWindowMs = 30 * 60 * 1000;
+
+  for (const order of orders) {
+    const amount = Number(order.total_amount || order.amount || 0).toFixed(2);
+    const key = [
+      order.user_id || "",
+      order.customer_phone || "",
+      (order.customer_name || "").toLowerCase().trim(),
+      (order.payment_method || "").toLowerCase().trim(),
+      amount,
+    ].join("|");
+    const orderTime = new Date(order.created_at || 0).getTime();
+    const latestTime = latestByKey.get(key);
+
+    if (latestTime && Math.abs(latestTime - orderTime) <= duplicateWindowMs) {
+      continue;
+    }
+
+    latestByKey.set(key, orderTime);
+    visibleOrders.push(order);
+  }
+
+  return visibleOrders;
+}
+
+export default async function AdminOrdersPage({ searchParams }) {
+  const resolvedSearchParams = await searchParams;
+  const invoiceFilter = String(resolvedSearchParams?.invoice || "").trim();
   const supabase = await createClient();
 
   const {
@@ -125,7 +154,7 @@ export default async function AdminOrdersPage() {
 
     if (paymentsError) {
       return (
-        <main style={styles.page}>
+        <main className="admin-orders-page responsive-admin-page" style={styles.page}>
           <section style={styles.errorBox}>
             <AlertTriangle size={42} color="#991b1b" />
             <h1 style={styles.errorTitle}>Orders could not load</h1>
@@ -144,6 +173,7 @@ export default async function AdminOrdersPage() {
     usedFallback = true;
     allOrders = (payments || []).map((payment) => ({
       id: payment.id,
+      user_id: payment.user_id,
       invoice_no: payment.order_invoice_no || payment.invoice_no || "-",
       customer_name: payment.customer_name || "-",
       customer_phone: payment.customer_phone || "-",
@@ -154,6 +184,15 @@ export default async function AdminOrdersPage() {
       created_at: payment.created_at,
       source: "payments",
     }));
+  }
+
+  allOrders = compactDuplicateCheckoutAttempts(allOrders);
+
+  if (invoiceFilter) {
+    allOrders = allOrders.filter((order) => {
+      const invoice = order.invoice_no || order.order_invoice_no || "";
+      return String(invoice).toLowerCase() === invoiceFilter.toLowerCase();
+    });
   }
 
   const totalOrders = allOrders.length;
@@ -188,7 +227,7 @@ export default async function AdminOrdersPage() {
   const latestOrder = allOrders[0];
 
   return (
-    <main style={styles.page}>
+    <main className="admin-orders-page responsive-admin-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.badgeTop}>NEW DUBAI ADMIN SYSTEM</p>
@@ -227,7 +266,7 @@ export default async function AdminOrdersPage() {
         </section>
       )}
 
-      <section style={styles.statsGrid}>
+      <section className="responsive-stats-grid" style={styles.statsGrid}>
         <StatCard
           dark
           icon={<ShoppingBag size={24} />}
@@ -280,17 +319,26 @@ export default async function AdminOrdersPage() {
         />
       </section>
 
-      <section style={styles.contentGrid}>
+      <section className="responsive-split-layout" style={styles.contentGrid}>
         <div style={styles.tablePanel}>
           <div style={styles.panelTop}>
             <div>
               <h2 style={styles.panelTitle}>Orders Records</h2>
               <p style={styles.panelSub}>
-                Manage each customer order and update the delivery status.
+                {invoiceFilter
+                  ? `Showing order for invoice ${invoiceFilter}.`
+                  : "Manage each customer order and update the delivery status."}
               </p>
             </div>
 
-            <span style={styles.countPill}>{allOrders.length} Records</span>
+            <div style={styles.panelActions}>
+              {invoiceFilter ? (
+                <Link href="/admin/orders" style={styles.clearFilterBtn}>
+                  Clear Filter
+                </Link>
+              ) : null}
+              <span style={styles.countPill}>{allOrders.length} Records</span>
+            </div>
           </div>
 
           {allOrders.length === 0 ? (
@@ -302,7 +350,7 @@ export default async function AdminOrdersPage() {
               </p>
             </div>
           ) : (
-            <div style={styles.tableWrap}>
+            <div className="responsive-table-wrap" style={styles.tableWrap}>
               <table style={styles.table}>
                 <thead>
                   <tr>
@@ -434,17 +482,11 @@ export default async function AdminOrdersPage() {
                       </td>
 
                       <td style={styles.tdRight}>
-                        {order.source !== "payments" ? (
-                          <Link
-                            href={`/admin/orders/${order.id}`}
-                            style={styles.viewBtn}
-                          >
-                            View Details
-                            <ExternalLink size={14} />
-                          </Link>
-                        ) : (
-                          <span style={styles.noDetails}>No Details</span>
-                        )}
+                        <span style={styles.noDetails}>
+                          {order.source === "payments"
+                            ? "No Details"
+                            : "Managed here"}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -759,6 +801,14 @@ const styles = {
     marginBottom: "16px",
   },
 
+  panelActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+
   panelTitle: {
     margin: 0,
     fontSize: "25px",
@@ -779,6 +829,17 @@ const styles = {
     borderRadius: "999px",
     fontSize: "12px",
     fontWeight: "900",
+    whiteSpace: "nowrap",
+  },
+
+  clearFilterBtn: {
+    background: "#fef3c7",
+    color: "#92400e",
+    padding: "9px 13px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: "900",
+    textDecoration: "none",
     whiteSpace: "nowrap",
   },
 

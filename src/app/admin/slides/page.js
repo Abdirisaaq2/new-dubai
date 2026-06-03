@@ -38,7 +38,6 @@ export default function AdminSlidesPage() {
   const [category, setCategory] = useState("New Dubai Fashion Style");
   const [discountText, setDiscountText] = useState("");
   const [isActive, setIsActive] = useState(true);
-  const [activeSlide, setActiveSlide] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +95,6 @@ export default function AdminSlidesPage() {
     setCategory("New Dubai Fashion Style");
     setDiscountText("");
     setIsActive(true);
-    setActiveSlide(false);
     setEditingId(null);
   }
 
@@ -104,12 +102,11 @@ export default function AdminSlidesPage() {
     setEditingId(slide.id);
     setTitle(slide.title || "");
     setSubtitle(slide.subtitle || "");
-    setImageUrl(slide.image_url || slide.image || "");
+    setImageUrl(slide.image_url || "");
     setButtonText(slide.button_text || "Shop Now");
     setCategory(slide.category || "New Dubai Fashion Style");
     setDiscountText(slide.discount_text || "");
     setIsActive(slide.is_active !== false);
-    setActiveSlide(slide.active_slide === true);
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -133,21 +130,7 @@ export default function AdminSlidesPage() {
       category: category.trim() || "New Dubai Fashion Style",
       discount_text: discountText.trim(),
       is_active: isActive,
-      active_slide: activeSlide,
     };
-
-    if (activeSlide) {
-      await supabase
-        .from("slides")
-        .update({ active_slide: false })
-        .neq("id", editingId || "00000000-0000-0000-0000-000000000000");
-
-      setSlides((prev) =>
-        prev.map((slide) =>
-          slide.id === editingId ? slide : { ...slide, active_slide: false }
-        )
-      );
-    }
 
     if (editingId) {
       const previousSlides = slides;
@@ -219,11 +202,20 @@ export default function AdminSlidesPage() {
   async function setMainSlide(slideId) {
     setMessage("");
 
-    await supabase.from("slides").update({ active_slide: false }).neq("id", slideId);
+    const targetSlide = slides.find((slide) => slide.id === slideId);
 
     const { error } = await supabase
       .from("slides")
-      .update({ active_slide: true, is_active: true })
+      .update({
+        title: targetSlide?.title || "",
+        subtitle: targetSlide?.subtitle || "",
+        image_url: targetSlide?.image_url || "",
+        button_text: targetSlide?.button_text || "Shop Now",
+        category: targetSlide?.category || "New Dubai Fashion Style",
+        discount_text: targetSlide?.discount_text || "",
+        is_active: true,
+        created_at: new Date().toISOString(),
+      })
       .eq("id", slideId);
 
     if (error) {
@@ -275,15 +267,6 @@ export default function AdminSlidesPage() {
     setMessage("Slide waa la delete gareeyay.");
     showToast("Slide deleted.");
 
-    if (slide.active_slide && remaining.length > 0) {
-      const nextSlide = remaining.find((item) => item.is_active !== false) || remaining[0];
-
-      await supabase
-        .from("slides")
-        .update({ active_slide: true, is_active: true })
-        .eq("id", nextSlide.id);
-    }
-
     await loadSlides();
   }
 
@@ -305,10 +288,16 @@ export default function AdminSlidesPage() {
     });
   }, [slides, debouncedSearch]);
 
-  const activeHero = slides.find((slide) => slide.active_slide === true);
+  const activeHero = [...slides]
+    .filter((slide) => slide.is_active !== false)
+    .sort((a, b) => {
+      const bTime = new Date(b?.created_at || 0).getTime();
+      const aTime = new Date(a?.created_at || 0).getTime();
+      return bTime - aTime;
+    })[0];
 
   return (
-    <main style={styles.page}>
+    <main className="admin-slides-page responsive-admin-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.badge}>NEW DUBAI ADMIN SYSTEM</p>
@@ -323,14 +312,14 @@ export default function AdminSlidesPage() {
           </Link>
         </div>
 
-        <div style={styles.statsGrid}>
+        <div className="responsive-stats-grid" style={styles.statsGrid}>
           <Stat title="All Slides" value={slides.length} />
           <Stat title="Visible" value={visibleSlides.length} />
           <Stat title="Main Hero" value={activeHero ? "1" : "0"} />
         </div>
       </section>
 
-      <section style={styles.layout}>
+      <section className="responsive-split-layout" style={styles.layout}>
         <aside style={styles.formPanel}>
           <div style={styles.formHead}>
             <div style={styles.iconBox}>
@@ -398,15 +387,6 @@ export default function AdminSlidesPage() {
                 onChange={(e) => setIsActive(e.target.checked)}
               />
               Visible to users
-            </label>
-
-            <label style={styles.checkRow}>
-              <input
-                type="checkbox"
-                checked={activeSlide}
-                onChange={(e) => setActiveSlide(e.target.checked)}
-              />
-              Main active hero
             </label>
 
             {imageUrl && (
@@ -494,7 +474,7 @@ export default function AdminSlidesPage() {
                 <article key={slide.id} style={styles.slideCard}>
                   <div style={styles.slideImageBox}>
                     <img
-                      src={slide.image_url || slide.image || "/images/classic-shoes.webp"}
+                      src={slide.image_url || "/images/classic-shoes.webp"}
                       alt={slide.title}
                       style={styles.slideImage}
                     />
@@ -506,7 +486,7 @@ export default function AdminSlidesPage() {
                         <span style={styles.showBadge}>SHOW</span>
                       )}
 
-                      {slide.active_slide === true && (
+                      {activeHero?.id === slide.id && (
                         <span style={styles.activeBadge}>MAIN HERO</span>
                       )}
                     </div>

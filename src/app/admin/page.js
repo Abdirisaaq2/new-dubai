@@ -11,6 +11,7 @@ import {
   Boxes,
 } from "lucide-react";
 import { createClient } from "@/lib/supabaseServer";
+import { createAdminClient } from "@/lib/supabaseAdmin";
 import AdminOldSidebar from "@/components/admin-old-sidebar";
 
 function StatusBadge({ status }) {
@@ -78,10 +79,24 @@ export default async function AdminPage() {
     .from("products")
     .select("*", { count: "exact", head: true });
 
-  const { count: customersCount } = await supabase
+  const supabaseAdmin = createAdminClient();
+
+  const { data: profilesForCounts } = await supabaseAdmin
     .from("profiles")
-    .select("*", { count: "exact", head: true })
-    .eq("role", "user");
+    .select("id, role");
+
+  const { data: authUsersData } = await supabaseAdmin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+
+  const roleById = new Map(
+    (profilesForCounts || []).map((item) => [item.id, item.role || "user"])
+  );
+
+  const customersCount = (authUsersData?.users || []).filter(
+    (authUser) => (roleById.get(authUser.id) || "user") === "user"
+  ).length;
 
   const { count: categoriesCount } = await supabase
     .from("categories")
@@ -177,8 +192,8 @@ export default async function AdminPage() {
   ];
 
   return (
-    <main style={styles.page}>
-      <div style={styles.shell}>
+    <main className="admin-dashboard-page" style={styles.page}>
+      <div className="admin-dashboard-shell" style={styles.shell}>
         <AdminOldSidebar />
 
         <section style={styles.content}>
@@ -206,7 +221,7 @@ export default async function AdminPage() {
             </div>
           </section>
 
-          <section style={styles.statsGrid}>
+          <section className="responsive-stats-grid" style={styles.statsGrid}>
             <MainCard
               href="/admin/products"
               icon={<Package size={25} />}
@@ -241,7 +256,7 @@ export default async function AdminPage() {
             />
           </section>
 
-          <section style={styles.chartsGrid}>
+          <section className="responsive-three-grid" style={styles.chartsGrid}>
             <PieChartCard
               title="Orders Status Chart"
               subtitle="Pending, processing, delivered and cancelled orders"
@@ -263,7 +278,7 @@ export default async function AdminPage() {
             />
           </section>
 
-          <section style={styles.summaryGrid}>
+          <section className="responsive-two-grid" style={styles.summaryGrid}>
             <div style={styles.revenuePanel}>
               <div style={styles.revenueIcon}>
                 <DollarSign size={28} />
@@ -301,7 +316,7 @@ export default async function AdminPage() {
             </div>
           </section>
 
-          <section style={styles.bottomGrid}>
+          <section className="responsive-two-grid" style={styles.bottomGrid}>
             <div style={styles.panel}>
               <div style={styles.panelTop}>
                 <div>

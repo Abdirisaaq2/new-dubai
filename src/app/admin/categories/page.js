@@ -295,7 +295,7 @@ export default function AdminCategoriesPage() {
   ).length;
 
   return (
-    <main style={styles.page}>
+    <main className="admin-categories-page responsive-admin-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.badge}>NEW DUBAI ADMIN SYSTEM</p>
@@ -310,14 +310,14 @@ export default function AdminCategoriesPage() {
           </Link>
         </div>
 
-        <div style={styles.statsGrid}>
+        <div className="responsive-stats-grid" style={styles.statsGrid}>
           <Stat icon={<Layers3 size={22} />} title="Categories" value={categories.length} />
           <Stat icon={<Package size={22} />} title="Linked Products" value={totalProductsLinked} />
           <Stat icon={<Boxes size={22} />} title="Empty Groups" value={emptyCategories} />
         </div>
       </section>
 
-      <section style={styles.layout}>
+      <section className="responsive-split-layout" style={styles.layout}>
         <aside style={styles.formPanel}>
           <div style={styles.formHead}>
             <div style={styles.iconBox}>{editingId ? "✎" : "＋"}</div>

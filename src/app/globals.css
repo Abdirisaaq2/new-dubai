@@ -49,91 +49,225 @@ textarea {
   font: inherit;
 }
 
+.dashboard-desktop-view {
+  width: 100%;
+}
+
+.dashboard-desktop-view .desktop-products-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+
+main,
+.dashboard-desktop-view {
+  min-width: 0;
+}
+
+main :is(section, article, aside, div),
+.dashboard-desktop-view :is(section, article, aside, div) {
+  min-width: 0;
+}
+
+.responsive-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.responsive-table-wrap table {
+  width: 100%;
+}
+
+.responsive-stats-grid {
+  width: 100%;
+}
+
+.admin-dashboard-shell {
+  align-items: flex-start;
+}
+
 @media (max-width: 1024px) {
-  [style*="grid-template-columns: repeat(6"],
-  [style*="grid-template-columns: repeat(5"],
-  [style*="grid-template-columns: repeat(4"],
-  [style*="grid-template-columns: repeat(3"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-
-  [style*="grid-template-columns: 390px"],
-  [style*="grid-template-columns: 380px"],
-  [style*="grid-template-columns: 340px"],
-  [style*="grid-template-columns: minmax(0px, 1fr) 360px"],
-  [style*="grid-template-columns: minmax(0, 1fr) 360px"],
-  [style*="grid-template-columns: minmax(0px, 1fr) 340px"],
-  [style*="grid-template-columns: minmax(0, 1fr) 340px"] {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  [style*="display: flex"][style*="align-items: flex-start"]:has(.admin-sidebar) {
+  .admin-shell,
+  .admin-dashboard-shell,
+  main > div:has(.admin-sidebar) {
     flex-direction: column !important;
   }
 
-  [style*="min-width: 320px"],
-  [style*="min-width: 330px"] {
-    min-width: 0 !important;
+  .responsive-split-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .responsive-split-layout > * {
+    height: auto !important;
+    max-height: none !important;
+    position: static !important;
+  }
+
+  .responsive-stats-grid,
+  .responsive-three-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .responsive-two-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .dashboard-desktop-view .desktop-products-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
   }
 }
 
 @media (max-width: 768px) {
-  [style*="padding: 22px"],
-  [style*="padding: 24px"],
-  [style*="padding: 26px"] {
-    padding: 16px !important;
+  body {
+    -webkit-text-size-adjust: 100%;
   }
 
-  [style*="border-radius: 28px"],
-  [style*="border-radius: 26px"],
-  [style*="border-radius: 24px"] {
+  main {
+    padding: 14px !important;
+  }
+
+  main > section,
+  main > div > section,
+  main > section > div,
+  main > div > section > div,
+  main article,
+  main aside {
     border-radius: 18px !important;
   }
 
-  [style*="display: flex"][style*="justify-content: space-between"] {
+  main > section:first-child,
+  main > div > section:first-child {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 16px !important;
+  }
+
+  .responsive-admin-page > section:first-child,
+  .responsive-shop-page > section:first-child,
+  .admin-dashboard-page section:first-child {
     flex-wrap: wrap !important;
   }
 
-  [style*="grid-template-columns: repeat(2"],
-  [style*="grid-template-columns: 1fr 1fr"],
-  [style*="grid-template-columns: 78px"],
-  [style*="grid-template-columns: 120px"] {
+  .responsive-stats-grid,
+  .responsive-three-grid,
+  .responsive-two-grid {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  [style*="position: sticky"] {
-    position: static !important;
-  }
-
-  [style*="font-size: 36px"],
-  [style*="font-size: 34px"] {
-    font-size: 28px !important;
+  main h1 {
+    font-size: clamp(26px, 8vw, 34px) !important;
     line-height: 1.15 !important;
+    overflow-wrap: anywhere;
   }
 
-  [style*="font-size: 30px"],
-  [style*="font-size: 28px"] {
-    font-size: 24px !important;
+  main h2 {
+    font-size: clamp(21px, 6vw, 28px) !important;
     line-height: 1.2 !important;
+    overflow-wrap: anywhere;
   }
 
-  [style*="width: 120px"][style*="height: 120px"],
-  [style*="width: 190px"][style*="height: 190px"] {
+  main h3,
+  main p,
+  main span,
+  main a,
+  main button,
+  main input,
+  main select {
+    max-width: 100%;
+  }
+
+  main > section,
+  main > div > section,
+  main section > div,
+  main article {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .responsive-table-wrap table {
+    min-width: 720px;
+  }
+
+  main input,
+  main select,
+  main textarea,
+  main button,
+  main a {
+    min-height: 42px;
+  }
+
+  .dashboard-desktop-view header > div:first-child {
+    align-items: stretch;
+  }
+
+  .dashboard-desktop-view header a,
+  .dashboard-desktop-view header button {
+    border-radius: 14px;
+  }
+
+  .dashboard-desktop-view .desktop-products-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .cart-page article {
+    align-items: stretch !important;
+  }
+
+  .cart-page article > div:first-child {
     width: 100% !important;
     height: auto !important;
     aspect-ratio: 1 / 1 !important;
   }
+
+  .cart-page article > div:first-child img {
+    width: 82% !important;
+    height: 82% !important;
+  }
+
+  .checkout-summary-item {
+    grid-template-columns: 68px minmax(0, 1fr) !important;
+  }
+
+  .checkout-summary-item > div:last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .admin-sidebar {
+    border-radius: 18px !important;
+  }
 }
 
 @media (max-width: 480px) {
-  [style*="grid-template-columns: repeat(auto-fit, minmax(320px"],
-  [style*="grid-template-columns: repeat(auto-fit, minmax(310px"],
-  [style*="grid-template-columns: repeat(auto-fit, minmax(290px"] {
-    grid-template-columns: minmax(0, 1fr) !important;
+  main {
+    padding: 12px !important;
   }
 
-  [style*="padding: 18px"],
-  [style*="padding: 20px"] {
+  main > section,
+  main > div > section,
+  main article,
+  main aside {
     padding: 14px !important;
+  }
+
+  .responsive-stats-grid {
+    gap: 10px !important;
+  }
+
+  .responsive-table-wrap table {
+    min-width: 640px;
+  }
+
+  .checkout-summary-card {
+    padding: 14px !important;
+  }
+
+  .dashboard-desktop-view header > div:first-child {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .dashboard-desktop-view footer {
+    overflow: hidden;
   }
 }

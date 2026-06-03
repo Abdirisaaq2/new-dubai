@@ -75,6 +75,34 @@ function OrderBadge({ status }) {
   );
 }
 
+function compactDuplicatePayments(payments) {
+  const latestByKey = new Map();
+  const visiblePayments = [];
+  const duplicateWindowMs = 30 * 60 * 1000;
+
+  for (const payment of payments) {
+    const amount = Number(payment.amount || 0).toFixed(2);
+    const key = [
+      payment.user_id || "",
+      payment.customer_phone || "",
+      (payment.customer_name || "").toLowerCase().trim(),
+      (payment.payment_method || "").toLowerCase().trim(),
+      amount,
+    ].join("|");
+    const paymentTime = new Date(payment.created_at || 0).getTime();
+    const latestTime = latestByKey.get(key);
+
+    if (latestTime && Math.abs(latestTime - paymentTime) <= duplicateWindowMs) {
+      continue;
+    }
+
+    latestByKey.set(key, paymentTime);
+    visiblePayments.push(payment);
+  }
+
+  return visiblePayments;
+}
+
 export default async function AdminPaymentsPage() {
   const supabase = await createClient();
 
@@ -107,10 +135,15 @@ export default async function AdminPaymentsPage() {
     .from("orders")
     .select("id, invoice_no, order_status, customer_name, total_amount");
 
-  const orderMap = new Map((orders || []).map((order) => [order.invoice_no, order]));
+  const orderByInvoice = new Map(
+    (orders || []).map((order) => [String(order.invoice_no || ""), order])
+  );
+  const orderById = new Map((orders || []).map((order) => [String(order.id), order]));
 
   const merged = (payments || []).map((payment) => {
-    const order = orderMap.get(payment.order_invoice_no);
+    const order =
+      orderById.get(String(payment.order_id || "")) ||
+      orderByInvoice.get(String(payment.order_invoice_no || payment.invoice_no || ""));
 
     return {
       ...payment,
@@ -121,29 +154,31 @@ export default async function AdminPaymentsPage() {
     };
   });
 
-  const totalPayments = merged.length;
+  const visiblePayments = compactDuplicatePayments(merged);
 
-  const paidPayments = merged.filter(
+  const totalPayments = visiblePayments.length;
+
+  const paidPayments = visiblePayments.filter(
     (item) => (item.payment_status || "").toLowerCase() === "paid"
   ).length;
 
-  const pendingOrders = merged.filter(
+  const pendingOrders = visiblePayments.filter(
     (item) => (item.order_status || "pending").toLowerCase() === "pending"
   ).length;
 
-  const deliveredOrders = merged.filter(
+  const deliveredOrders = visiblePayments.filter(
     (item) => (item.order_status || "").toLowerCase() === "delivered"
   ).length;
 
-  const totalAmount = merged.reduce(
+  const totalAmount = visiblePayments.reduce(
     (sum, item) => sum + Number(item.amount || 0),
     0
   );
 
-  const latestPayment = merged[0];
+  const latestPayment = visiblePayments[0];
 
   return (
-    <main style={styles.page}>
+    <main className="admin-payments-page responsive-admin-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.badgeTop}>NEW DUBAI ADMIN SYSTEM</p>
@@ -180,7 +215,7 @@ export default async function AdminPaymentsPage() {
         </section>
       )}
 
-      <section style={styles.statsGrid}>
+      <section className="responsive-stats-grid" style={styles.statsGrid}>
         <StatCard
           dark
           icon={<CreditCard size={24} />}
@@ -218,7 +253,7 @@ export default async function AdminPaymentsPage() {
         />
       </section>
 
-      <section style={styles.contentGrid}>
+      <section className="responsive-split-layout" style={styles.contentGrid}>
         <div style={styles.tablePanel}>
           <div style={styles.panelTop}>
             <div>
@@ -228,10 +263,10 @@ export default async function AdminPaymentsPage() {
               </p>
             </div>
 
-            <span style={styles.countPill}>{merged.length} Records</span>
+            <span style={styles.countPill}>{visiblePayments.length} Records</span>
           </div>
 
-          {merged.length === 0 ? (
+          {visiblePayments.length === 0 ? (
             <div style={styles.emptyBox}>
               <Wallet size={42} color="#f5a400" />
               <h3 style={styles.emptyTitle}>No payments found</h3>
@@ -240,7 +275,7 @@ export default async function AdminPaymentsPage() {
               </p>
             </div>
           ) : (
-            <div style={styles.tableWrap}>
+            <div className="responsive-table-wrap" style={styles.tableWrap}>
               <table style={styles.table}>
                 <thead>
                   <tr>
@@ -256,7 +291,7 @@ export default async function AdminPaymentsPage() {
                 </thead>
 
                 <tbody>
-                  {merged.map((payment, index) => (
+                  {visiblePayments.map((payment, index) => (
                     <tr
                       key={payment.id}
                       style={{
@@ -319,7 +354,12 @@ export default async function AdminPaymentsPage() {
 
                       <td style={styles.tdRight}>
                         {payment.order_id ? (
-                          <Link href="/admin/orders" style={styles.viewBtn}>
+                          <Link
+                            href={`/admin/orders?invoice=${encodeURIComponent(
+                              payment.order_invoice_no || payment.invoice_no || ""
+                            )}`}
+                            style={styles.viewBtn}
+                          >
                             View Order
                             <ExternalLink size={14} />
                           </Link>

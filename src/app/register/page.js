@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
 import { showToast } from "@/lib/adminUi";
 
 export default function RegisterPage() {
   const supabase = createClient();
+  const router = useRouter();
 
   const [form, setForm] = useState({
     username: "",
@@ -34,6 +36,16 @@ export default function RegisterPage() {
     e.preventDefault();
     setMessage("");
 
+    const email = form.email.trim().toLowerCase();
+    const username = form.username.trim();
+    const phone = form.phone.trim();
+
+    if (form.password.length < 6) {
+      showToast("Password must be at least 6 characters.", "error");
+      setMessage("Password must be at least 6 characters.");
+      return;
+    }
+
     if (form.password !== form.confirmPassword) {
       showToast("Passwords do not match.", "error");
       setMessage("Passwords do not match.");
@@ -42,56 +54,84 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: {
-          username: form.username,
-          phone: form.phone,
-          gender: form.gender,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: form.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
+          data: {
+            username,
+            phone,
+            gender: form.gender,
+            role: "user",
+            status: "active",
+          },
         },
-      },
-    });
-
-    if (error) {
-      showToast(error.message, "error");
-      setMessage(error.message);
-      setLoading(false);
-      return;
-    }
-
-    if (data.user) {
-      const { error: profileError } = await supabase.from("profiles").upsert({
-        id: data.user.id,
-        username: form.username,
-        email: form.email,
-        phone: form.phone,
-        gender: form.gender,
-        role: "user",
-        status: "active",
       });
 
-      if (profileError) {
-        showToast(profileError.message, "error");
-        setMessage(profileError.message);
-        setLoading(false);
+      if (error) {
+        showToast(error.message, "error");
+        setMessage(error.message);
         return;
       }
+
+      if (!data?.user) {
+        showToast("Account could not be created. Please try again.", "error");
+        setMessage("Account could not be created. Please try again.");
+        return;
+      }
+
+      if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        const { error: resendError } = await supabase.auth.resend({
+          type: "signup",
+          email,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/confirm`,
+          },
+        });
+
+        if (resendError) {
+          showToast("Email-kan account ayuu horey u leeyahay. Fadlan login samee.", "error");
+          setMessage("Email-kan account ayuu horey u leeyahay. Fadlan login samee.");
+          return;
+        }
+
+        showToast("OTP sent again. Check your Gmail inbox.");
+        setMessage("OTP sent again. Check your Gmail inbox.");
+        router.push(`/confirm-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
+        },
+      });
+
+      if (resendError) {
+        showToast(
+          "Account waa la abuuray, laakiin OTP email lama diri karin. Try Resend OTP.",
+          "error"
+        );
+        setMessage(
+          "Account waa la abuuray, laakiin OTP email lama diri karin. Try Resend OTP."
+        );
+        router.push(`/confirm-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
+      showToast("OTP sent to your email. Check your Gmail inbox.");
+      setMessage("OTP sent to your email. Check your Gmail inbox.");
+      router.push(`/confirm-email?email=${encodeURIComponent(email)}`);
+    } catch (error) {
+      showToast(error.message || "Something went wrong.", "error");
+      setMessage(error.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
     }
-
-    showToast("Account created successfully.");
-    setMessage("Account created successfully. You can now sign in.");
-    setLoading(false);
-
-    setForm({
-      username: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-      phone: "",
-      gender: "",
-    });
   }
 
   return (

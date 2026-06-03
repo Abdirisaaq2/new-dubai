@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabaseAdmin";
 
 function StatusBadge({ status }) {
   const value = (status || "active").toLowerCase();
@@ -56,26 +57,23 @@ export default async function ViewCustomersPage({ searchParams }) {
 
   const query = (searchParams?.q || "").trim();
 
-  let request = supabase
+  const supabaseAdmin = createAdminClient();
+  const { data: profiles, error } = await supabaseAdmin
     .from("profiles")
     .select("id, username, email, phone, gender, role, status, created_at")
-    .eq("role", "user")
     .order("created_at", { ascending: false });
 
-  if (query) {
-    request = request.or(
-      `username.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`
-    );
-  }
+  const { data: authUsersData, error: authUsersError } =
+    await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
 
-  const { data: customers, error } = await request;
-
-  if (error) {
+  if (error || authUsersError) {
     return (
-      <main style={styles.page}>
+      <main className="admin-customers-page responsive-admin-page" style={styles.page}>
         <div style={styles.errorBox}>
           <h1 style={styles.errorTitle}>Failed to load customers.</h1>
-          <p style={styles.errorText}>{error.message}</p>
+          <p style={styles.errorText}>
+            {error?.message || authUsersError?.message}
+          </p>
           <Link href="/admin" style={styles.backHome}>
             <ArrowLeft size={18} />
             Back Home
@@ -85,7 +83,43 @@ export default async function ViewCustomersPage({ searchParams }) {
     );
   }
 
-  const customerList = customers || [];
+  const profilesById = new Map((profiles || []).map((profile) => [profile.id, profile]));
+
+  const customerList = (authUsersData?.users || [])
+    .map((authUser) => {
+      const profile = profilesById.get(authUser.id);
+      const metadata = authUser.user_metadata || {};
+
+      return {
+        id: authUser.id,
+        username:
+          profile?.username ||
+          metadata.username ||
+          authUser.email?.split("@")[0] ||
+          "Customer",
+        email: profile?.email || authUser.email || "",
+        phone: profile?.phone || metadata.phone || authUser.phone || "",
+        gender: profile?.gender || metadata.gender || "",
+        role: profile?.role || metadata.role || "user",
+        status: profile?.status || metadata.status || "active",
+        created_at: profile?.created_at || authUser.created_at,
+      };
+    })
+    .filter((customer) => customer.role !== "admin")
+    .filter((customer) => {
+      if (!query) return true;
+      const text = query.toLowerCase();
+      return (
+        customer.username?.toLowerCase().includes(text) ||
+        customer.email?.toLowerCase().includes(text) ||
+        customer.phone?.toLowerCase().includes(text)
+      );
+    })
+    .sort((a, b) => {
+      const bTime = new Date(b?.created_at || 0).getTime();
+      const aTime = new Date(a?.created_at || 0).getTime();
+      return bTime - aTime;
+    });
 
   const totalCustomers = customerList.length;
 
@@ -100,7 +134,7 @@ export default async function ViewCustomersPage({ searchParams }) {
   const withPhone = customerList.filter((customer) => customer.phone).length;
 
   return (
-    <main style={styles.page}>
+    <main className="admin-customers-page responsive-admin-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.topBadge}>NEW DUBAI ADMIN SYSTEM</p>
@@ -128,7 +162,7 @@ export default async function ViewCustomersPage({ searchParams }) {
         </div>
       </section>
 
-      <section style={styles.statsGrid}>
+      <section className="responsive-stats-grid" style={styles.statsGrid}>
         <StatCard
           title="Customers"
           value={totalCustomers}

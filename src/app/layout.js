@@ -18,6 +18,10 @@ export const metadata = {
     "New Dubai is a modern men fashion store for clothes, shoes, perfumes, and accessories.",
 };
 
+export const viewport = {
+  width: 1280,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html

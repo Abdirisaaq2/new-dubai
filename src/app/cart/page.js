@@ -60,7 +60,7 @@ export default function CartPage() {
         price: Number(p?.price || 0),
         image_url: p?.image_url || "/images/t-shirts.jpg",
         category: p?.category || "Fashion",
-        stock: Number(p?.stock || 10),
+        stock: Number(p?.stock ?? 0),
         discount: Number(p?.discount || 0),
       };
     });
@@ -78,7 +78,14 @@ export default function CartPage() {
   }, []);
 
   async function updateQuantity(id, qty) {
-    const quantity = Number(qty);
+    const item = cartItems.find((cartItem) => cartItem.id === id);
+    const stock = Number(item?.stock ?? 0);
+    const quantity = Math.max(1, Math.min(Number(qty), stock));
+
+    if (!item || stock <= 0) {
+      showToast("Alaabtan stock-keedu wuu dhamaaday.", "error");
+      return;
+    }
 
     const { error } = await supabase
       .from("cart_items")
@@ -153,7 +160,7 @@ export default function CartPage() {
 
   if (loading) {
     return (
-      <main style={styles.page}>
+      <main className="cart-page responsive-shop-page" style={styles.page}>
         <section style={styles.loadingBox}>
           <ShoppingCart size={34} color="#f5a400" />
           <p style={styles.loadingText}>Loading cart...</p>
@@ -164,7 +171,7 @@ export default function CartPage() {
 
   if (cartItems.length === 0) {
     return (
-      <main style={styles.page}>
+      <main className="cart-page responsive-shop-page" style={styles.page}>
         <section style={styles.header}>
           <div>
             <p style={styles.badge}>NEW DUBAI CART</p>
@@ -197,7 +204,7 @@ export default function CartPage() {
   }
 
   return (
-    <main style={styles.page}>
+    <main className="cart-page responsive-shop-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.badge}>NEW DUBAI CART</p>
@@ -213,7 +220,7 @@ export default function CartPage() {
         </Link>
       </section>
 
-      <section style={styles.layout}>
+      <section className="responsive-split-layout" style={styles.layout}>
         <div style={styles.leftPanel}>
           <div style={styles.panelTop}>
             <div>
@@ -249,13 +256,25 @@ export default function CartPage() {
                     <p style={styles.category}>{item.category}</p>
                     <h3 style={styles.productName}>{item.product_name}</h3>
 
-                    <div style={styles.stockRow}>
-                      <span style={styles.inStock}>
-                        <CheckCircle size={14} />
-                        In Stock
-                      </span>
+                    {(item.color || item.size) && (
+                      <p style={styles.variantText}>
+                        {item.color ? `Color: ${item.color}` : ""}
+                        {item.color && item.size ? " | " : ""}
+                        {item.size ? `Size: ${item.size}` : ""}
+                      </p>
+                    )}
 
-                      {item.stock <= 5 && (
+                    <div style={styles.stockRow}>
+                      {item.stock <= 0 ? (
+                        <span style={styles.outStock}>Out of Stock</span>
+                      ) : (
+                        <span style={styles.inStock}>
+                          <CheckCircle size={14} />
+                          In Stock
+                        </span>
+                      )}
+
+                      {item.stock > 0 && item.stock <= 5 && (
                         <span style={styles.lowStock}>Low Stock</span>
                       )}
                     </div>
@@ -284,9 +303,13 @@ export default function CartPage() {
                     <select
                       value={item.quantity}
                       onChange={(e) => updateQuantity(item.id, e.target.value)}
+                      disabled={item.stock <= 0}
                       style={styles.qtySelect}
                     >
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((q) => (
+                      {Array.from(
+                        { length: Math.min(10, Math.max(1, item.stock)) },
+                        (_, index) => index + 1
+                      ).map((q) => (
                         <option key={q} value={q}>
                           Qty {q}
                         </option>
@@ -514,6 +537,13 @@ const styles = {
     lineHeight: "26px",
   },
 
+  variantText: {
+    margin: "7px 0 0",
+    color: "#52525b",
+    fontSize: "13px",
+    fontWeight: "800",
+  },
+
   stockRow: {
     marginTop: "10px",
     display: "flex",
@@ -537,6 +567,15 @@ const styles = {
   lowStock: {
     color: "#9a3412",
     background: "#ffedd5",
+    borderRadius: "999px",
+    padding: "5px 9px",
+    fontSize: "12px",
+    fontWeight: "900",
+  },
+
+  outStock: {
+    color: "#991b1b",
+    background: "#fee2e2",
     borderRadius: "999px",
     padding: "5px 9px",
     fontSize: "12px",

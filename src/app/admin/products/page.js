@@ -27,6 +27,9 @@ export default function ProductsPage() {
   const [category, setCategory] = useState("Clothes");
   const [stock, setStock] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [imageInputKey, setImageInputKey] = useState(0);
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 350);
@@ -61,7 +64,7 @@ export default function ProductsPage() {
 
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, price, category, stock, image_url, image, created_at")
+        .select("id, name, price, category, stock, image_url, created_at")
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -94,6 +97,9 @@ export default function ProductsPage() {
     setCategory("Clothes");
     setStock("");
     setImageUrl("");
+    setSelectedImageFile(null);
+    setImagePreviewUrl("");
+    setImageInputKey((key) => key + 1);
     setEditingId(null);
   }
 
@@ -103,27 +109,61 @@ export default function ProductsPage() {
     setPrice(product.price || "");
     setCategory(product.category || "Clothes");
     setStock(product.stock || "");
-    setImageUrl(product.image_url || product.image || "");
+    setImageUrl(product.image_url || "");
+    setSelectedImageFile(null);
+    setImagePreviewUrl(product.image_url || "");
+    setImageInputKey((key) => key + 1);
     setMessage("");
+  }
+
+  async function uploadProductImage(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch("/api/admin/product-image-upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result.error || "Image upload ma shaqayn.");
+    }
+
+    return result.url;
   }
 
   async function saveProduct(e) {
     e.preventDefault();
     setMessage("");
 
-    if (!name || !price || !category || !stock || !imageUrl) {
+    if (!name || !price || !category || !stock || (!imageUrl && !selectedImageFile)) {
       setMessage("Fadlan buuxi Product Name, Price, Category, Stock iyo Image.");
       return;
     }
 
     setSaving(true);
 
+    let uploadedImageUrl = imageUrl.trim();
+
+    try {
+      if (selectedImageFile) {
+        uploadedImageUrl = await uploadProductImage(selectedImageFile);
+      }
+    } catch (error) {
+      console.log(error);
+      setMessage(error.message || "Image upload ma shaqayn.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       name: name.trim(),
       price: Number(price),
       category,
       stock: Number(stock),
-      image_url: imageUrl.trim(),
+      image_url: uploadedImageUrl,
     };
 
     if (editingId) {
@@ -230,13 +270,18 @@ export default function ProductsPage() {
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      const searchText = debouncedSearch.toLowerCase();
+      const searchText = debouncedSearch.trim().toLowerCase();
+      const productName = (product.name || "").toLowerCase();
+      const productCategory = (product.category || "").trim().toLowerCase();
+      const activeCategory = categoryFilter.trim().toLowerCase();
+
       const matchesSearch =
-        product.name?.toLowerCase().includes(searchText) ||
-        product.category?.toLowerCase().includes(searchText);
+        searchText === "" ||
+        productName.includes(searchText) ||
+        productCategory.includes(searchText);
 
       const matchesCategory =
-        categoryFilter === "All" || product.category === categoryFilter;
+        activeCategory === "all" || productCategory === activeCategory;
 
       return matchesSearch && matchesCategory;
     });
@@ -253,7 +298,7 @@ export default function ProductsPage() {
   );
 
   return (
-    <main style={styles.page}>
+    <main className="admin-products-page responsive-admin-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <div style={styles.badge}>NEW DUBAI ADMIN SYSTEM</div>
@@ -265,7 +310,7 @@ export default function ProductsPage() {
           </Link>
         </div>
 
-        <div style={styles.statsGrid}>
+        <div className="responsive-stats-grid" style={styles.statsGrid}>
           <Stat title="Products" value={totalProducts} />
           <Stat title="Low Stock" value={lowStock} />
           <Stat title="Out" value={outStock} />
@@ -273,7 +318,7 @@ export default function ProductsPage() {
         </div>
       </section>
 
-      <section style={styles.layout}>
+      <section className="responsive-split-layout" style={styles.layout}>
         <aside style={styles.formPanel}>
           <div style={styles.formHead}>
             <div style={styles.iconBox}>＋</div>
@@ -324,16 +369,28 @@ export default function ProductsPage() {
               placeholder="10"
             />
 
-            <Field
-              label="Image URL / Path"
-              value={imageUrl}
-              setValue={setImageUrl}
-              placeholder="/images/products/shirt.jpg"
+            <label style={styles.label}>Image URL / Path</label>
+            <input
+              key={imageInputKey}
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setSelectedImageFile(file);
+                setImagePreviewUrl(URL.createObjectURL(file));
+                setImageUrl("");
+              }}
+              style={styles.input}
             />
 
-            {imageUrl && (
+            {(imagePreviewUrl || imageUrl) && (
               <div style={styles.previewBox}>
-                <img src={imageUrl} alt="Preview" style={styles.previewImg} />
+                <img
+                  src={imagePreviewUrl || imageUrl}
+                  alt="Preview"
+                  style={styles.previewImg}
+                />
               </div>
             )}
 
@@ -357,7 +414,9 @@ export default function ProductsPage() {
           <div style={styles.listTop}>
             <div>
               <h2 style={styles.listTitle}>Product Inventory</h2>
-              <p style={styles.listSub}>Search, filter, edit and delete products.</p>
+              <p style={styles.listSub}>
+                Showing {filteredProducts.length} of {products.length} products.
+              </p>
             </div>
 
             <div style={styles.filters}>
@@ -416,7 +475,7 @@ export default function ProductsPage() {
               )}
             </div>
           ) : (
-            <div style={styles.tableWrap}>
+            <div className="responsive-table-wrap" style={styles.tableWrap}>
               <table style={styles.table}>
                 <thead>
                   <tr>
@@ -446,7 +505,6 @@ export default function ProductsPage() {
                             <img
                               src={
                                 product.image_url ||
-                                product.image ||
                                 "/images/placeholder.png"
                               }
                               alt={product.name}

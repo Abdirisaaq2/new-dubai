@@ -74,7 +74,7 @@ export default async function OrderDetailsPage({ params }) {
     order.invoice_no || order.order_invoice_no || String(order.id).slice(0, 8);
 
   return (
-    <main style={styles.page}>
+    <main className="order-details-page responsive-shop-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.smallTitle}>NEW DUBAI CUSTOMER</p>

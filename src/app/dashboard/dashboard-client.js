@@ -180,7 +180,7 @@ export default function DashboardClient({
   }
 
   return (
-    <div className="min-h-screen bg-[#fffdf7]">
+    <div className="dashboard-desktop-view min-h-screen bg-[#fffdf7]">
       {/* HEADER */}
       <header className="sticky top-0 z-[99999] border-b border-black/10 bg-black text-white shadow-sm">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:flex-nowrap md:gap-4 md:px-6">
@@ -532,7 +532,7 @@ export default function DashboardClient({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 items-stretch gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="desktop-products-grid grid grid-cols-1 items-stretch gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
@@ -920,9 +920,43 @@ function ProductCard({ supabase, setCartCount, product }) {
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
 
+  const colorOptions = [
+    { name: "Black", value: "#111111", filter: "none" },
+    {
+      name: "White",
+      value: "#ffffff",
+      filter: "grayscale(1) brightness(2.35) contrast(0.82)",
+    },
+    {
+      name: "Gold",
+      value: "#f5a400",
+      filter: "sepia(1) saturate(2.4) hue-rotate(358deg) brightness(1.25)",
+    },
+    {
+      name: "Blue",
+      value: "#2563eb",
+      filter: "sepia(1) saturate(3) hue-rotate(180deg) brightness(0.95)",
+    },
+    {
+      name: "Red",
+      value: "#dc2626",
+      filter: "sepia(1) saturate(3.5) hue-rotate(315deg) brightness(0.92)",
+    },
+  ];
+  const sizeOptions = ["S", "M", "L", "XL", "XXL"];
+  const [selectedColor, setSelectedColor] = useState(colorOptions[0]);
+  const [selectedSize, setSelectedSize] = useState(sizeOptions[1]);
+
+  const productCategory = (product.category || "").toLowerCase();
+  const hasVariants =
+    productCategory.includes("cloth") ||
+    productCategory.includes("shirt") ||
+    productCategory.includes("shoe");
+
   const price = Number(product.price || 0);
   const oldPrice = price + 10;
-  const stock = Number(product.stock || 12);
+  const stock = Number(product.stock ?? 0);
+  const maxQuantity = Math.min(10, Math.max(1, stock));
   const isLowStock = stock > 0 && stock <= 5;
 
   const ratingValue = Math.max(0, Math.min(5, Number(product.rating || 4)));
@@ -1006,6 +1040,11 @@ function ProductCard({ supabase, setCartCount, product }) {
   }
 
   async function handleAddToCart() {
+    if (stock <= 0) {
+      showToast("Alaabtan stock-keedu wuu dhamaaday.", "error");
+      return;
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -1015,12 +1054,20 @@ function ProductCard({ supabase, setCartCount, product }) {
       return;
     }
 
-    const { data: existingItem, error: existingError } = await supabase
+    let existingQuery = supabase
       .from("cart_items")
       .select("*")
       .eq("user_id", user.id)
-      .eq("product_id", product.id)
-      .maybeSingle();
+      .eq("product_id", product.id);
+
+    if (hasVariants) {
+      existingQuery = existingQuery
+        .eq("color", selectedColor.name)
+        .eq("size", selectedSize);
+    }
+
+    const { data: existingItem, error: existingError } =
+      await existingQuery.maybeSingle();
 
     if (existingError) {
       showToast(existingError.message, "error");
@@ -1028,13 +1075,23 @@ function ProductCard({ supabase, setCartCount, product }) {
     }
 
     let writeError = null;
+    const nextQuantity = existingItem
+      ? Number(existingItem.quantity || 0) + Number(quantity)
+      : Number(quantity);
+
+    if (nextQuantity > stock) {
+      showToast(`Stock kuma filna. Available: ${stock}.`, "error");
+      return;
+    }
 
     if (existingItem) {
       const { error } = await supabase
         .from("cart_items")
         .update({
-          quantity: Number(existingItem.quantity) + Number(quantity),
+          quantity: nextQuantity,
           rating: userRating,
+          color: hasVariants ? selectedColor.name : null,
+          size: hasVariants ? selectedSize : null,
         })
         .eq("id", existingItem.id);
 
@@ -1043,8 +1100,10 @@ function ProductCard({ supabase, setCartCount, product }) {
       const { error } = await supabase.from("cart_items").insert({
         user_id: user.id,
         product_id: product.id,
-        quantity: Number(quantity),
+        quantity: nextQuantity,
         rating: userRating,
+        color: hasVariants ? selectedColor.name : null,
+        size: hasVariants ? selectedSize : null,
       });
 
       writeError = error;
@@ -1078,7 +1137,7 @@ function ProductCard({ supabase, setCartCount, product }) {
   }
 
   function increaseQty() {
-    setQuantity((prev) => Math.min(10, prev + 1));
+    setQuantity((prev) => Math.min(maxQuantity, prev + 1));
   }
 
   return (
@@ -1091,7 +1150,12 @@ function ProductCard({ supabase, setCartCount, product }) {
 
       <div
         className="relative mx-auto mb-5 flex w-full max-w-[210px] flex-none items-center justify-center overflow-hidden rounded-[20px] border border-zinc-200 bg-zinc-100 sm:rounded-[24px]"
-        style={{ aspectRatio: "1 / 1" }}
+        style={{
+          aspectRatio: "1 / 1",
+          background: hasVariants
+            ? `radial-gradient(circle at 50% 55%, ${selectedColor.value}33, transparent 62%), #f4f4f5`
+            : "#f4f4f5",
+        }}
       >
         <span className="absolute left-3 top-3 z-10 rounded-full bg-black/80 px-3 py-1 text-xs font-bold text-yellow-400">
           New
@@ -1099,9 +1163,22 @@ function ProductCard({ supabase, setCartCount, product }) {
         <img
           src={product.image_url || "/images/t-shirts.jpg"}
           alt={product.name}
-          className="block transition duration-500 group-hover:scale-110"
-          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+          className="relative z-[1] block transition duration-500 group-hover:scale-110"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center",
+            filter: hasVariants ? selectedColor.filter : "none",
+          }}
         />
+
+        {hasVariants && (
+          <span
+            className="pointer-events-none absolute bottom-3 right-3 z-10 h-10 w-10 rounded-full border-2 border-white shadow-lg"
+            style={{ background: selectedColor.value }}
+          />
+        )}
       </div>
 
       <p className="text-sm font-medium text-yellow-700">
@@ -1185,6 +1262,65 @@ function ProductCard({ supabase, setCartCount, product }) {
           </span>
         )}
       </div>
+
+      {hasVariants && (
+        <>
+          <div className="mt-5">
+            <p className="mb-3 text-sm font-medium text-zinc-700">Color</p>
+
+            <div className="flex flex-wrap gap-2">
+              {colorOptions.map((color) => {
+                const active = selectedColor.name === color.name;
+
+                return (
+                  <button
+                    key={color.name}
+                    type="button"
+                    onClick={() => setSelectedColor(color)}
+                    aria-label={`Choose ${color.name}`}
+                    title={color.name}
+                    className={`h-9 w-9 rounded-full border transition ${
+                      active
+                        ? "border-black ring-2 ring-yellow-500 ring-offset-2"
+                        : "border-zinc-300 hover:border-black"
+                    }`}
+                    style={{ background: color.value }}
+                  />
+                );
+              })}
+            </div>
+
+            <p className="mt-3 text-sm font-bold text-zinc-700">
+              Selected: {selectedColor.name}
+            </p>
+          </div>
+
+          <div className="mt-5">
+            <p className="mb-3 text-sm font-medium text-zinc-700">Size</p>
+
+            <div className="flex flex-wrap gap-2">
+              {sizeOptions.map((size) => {
+                const active = selectedSize === size;
+
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setSelectedSize(size)}
+                    className={`flex h-9 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-black transition ${
+                      active
+                        ? "border-black bg-black text-yellow-400"
+                        : "border-zinc-300 bg-white text-black hover:border-yellow-500"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="mt-6">
         <p className="mb-3 text-sm font-medium text-zinc-700">Quantity</p>

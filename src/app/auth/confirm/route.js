@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { createAccountProfile } from "@/lib/createAccountProfile";
 
 export async function GET(request) {
   const { searchParams, origin } = new URL(request.url);
@@ -17,6 +18,14 @@ export async function GET(request) {
     if (!error) {
       if (type === "recovery") {
         return NextResponse.redirect(`${origin}/reset-password`);
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        await createAccountProfile(user);
       }
 
       return NextResponse.redirect(`${origin}/dashboard`);

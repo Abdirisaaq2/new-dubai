@@ -94,7 +94,7 @@ export default async function TrackOrderPage({ searchParams }) {
   const steps = getSteps(status);
 
   return (
-    <main style={styles.page}>
+    <main className="orders-track-page responsive-shop-page" style={styles.page}>
       <section style={styles.header}>
         <div>
           <p style={styles.smallTitle}>NEW DUBAI CUSTOMER</p>
@@ -135,7 +135,7 @@ export default async function TrackOrderPage({ searchParams }) {
           </Link>
         </section>
       ) : (
-        <section style={styles.contentGrid}>
+        <section className="responsive-split-layout" style={styles.contentGrid}>
           <div style={styles.trackCard}>
             <div style={styles.orderTop}>
               <div>
