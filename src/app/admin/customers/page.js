@@ -57,22 +57,38 @@ export default async function ViewCustomersPage({ searchParams }) {
 
   const query = (searchParams?.q || "").trim();
 
-  const supabaseAdmin = createAdminClient();
-  const { data: profiles, error } = await supabaseAdmin
+  const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdminClient()
+    : supabase;
+
+  let { data: profiles, error } = await db
     .from("profiles")
     .select("id, username, email, phone, gender, role, status, created_at")
     .order("created_at", { ascending: false });
 
-  const { data: authUsersData, error: authUsersError } =
-    await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const retry = await supabase
+      .from("profiles")
+      .select("id, username, email, phone, gender, role, status, created_at")
+      .order("created_at", { ascending: false });
+    profiles = retry.data;
+    error = retry.error;
+  }
 
-  if (error || authUsersError) {
+  let authUsersData = { users: [] };
+
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const result = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    authUsersData = result.data || { users: [] };
+  }
+
+  if (error) {
     return (
       <main className="admin-customers-page responsive-admin-page" style={styles.page}>
         <div style={styles.errorBox}>
           <h1 style={styles.errorTitle}>Failed to load customers.</h1>
           <p style={styles.errorText}>
-            {error?.message || authUsersError?.message}
+            {error.message}
           </p>
           <Link href="/admin" style={styles.backHome}>
             <ArrowLeft size={18} />
@@ -84,8 +100,13 @@ export default async function ViewCustomersPage({ searchParams }) {
   }
 
   const profilesById = new Map((profiles || []).map((profile) => [profile.id, profile]));
+  const profileOnlyCustomers = (profiles || []).filter(
+    (profile) =>
+      (profile.role || "user") !== "admin" &&
+      !authUsersData?.users?.some((authUser) => authUser.id === profile.id)
+  );
 
-  const customerList = (authUsersData?.users || [])
+  const authCustomerList = (authUsersData?.users || [])
     .map((authUser) => {
       const profile = profilesById.get(authUser.id);
       const metadata = authUser.user_metadata || {};
@@ -105,7 +126,9 @@ export default async function ViewCustomersPage({ searchParams }) {
         created_at: profile?.created_at || authUser.created_at,
       };
     })
-    .filter((customer) => customer.role !== "admin")
+    .filter((customer) => customer.role !== "admin");
+
+  const customerList = [...authCustomerList, ...profileOnlyCustomers]
     .filter((customer) => {
       if (!query) return true;
       const text = query.toLowerCase();

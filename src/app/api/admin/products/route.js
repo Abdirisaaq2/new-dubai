@@ -3,15 +3,6 @@ import { createAdminClient } from "@/lib/supabaseAdmin";
 import { createClient } from "@/lib/supabaseServer";
 
 async function requireActiveAdmin() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      error: NextResponse.json(
-        { error: "SUPABASE_SERVICE_ROLE_KEY Vercel kuma jiro." },
-        { status: 500 }
-      ),
-    };
-  }
-
   const supabase = await createClient();
 
   const {
@@ -24,8 +15,7 @@ async function requireActiveAdmin() {
     };
   }
 
-  const admin = createAdminClient();
-  const { data: profile } = await admin
+  const { data: profile } = await supabase
     .from("profiles")
     .select("role, status")
     .eq("id", user.id)
@@ -37,7 +27,11 @@ async function requireActiveAdmin() {
     };
   }
 
-  return { admin };
+  const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdminClient()
+    : supabase;
+
+  return { db, supabase, usingServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) };
 }
 
 function cleanProductPayload(payload) {
@@ -63,7 +57,7 @@ function cleanProductPayload(payload) {
 }
 
 export async function POST(request) {
-  const { admin, error: authError } = await requireActiveAdmin();
+  const { db, supabase, usingServiceRole, error: authError } = await requireActiveAdmin();
   if (authError) return authError;
 
   const body = await request.json().catch(() => ({}));
@@ -73,11 +67,21 @@ export async function POST(request) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  const { data, error: insertError } = await admin
+  let { data, error: insertError } = await db
     .from("products")
     .insert([product])
     .select()
     .single();
+
+  if (insertError && usingServiceRole) {
+    const retry = await supabase
+      .from("products")
+      .insert([product])
+      .select()
+      .single();
+    data = retry.data;
+    insertError = retry.error;
+  }
 
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 400 });
@@ -87,13 +91,22 @@ export async function POST(request) {
 }
 
 export async function GET() {
-  const { admin, error: authError } = await requireActiveAdmin();
+  const { db, supabase, usingServiceRole, error: authError } = await requireActiveAdmin();
   if (authError) return authError;
 
-  const { data, error } = await admin
+  let { data, error } = await db
     .from("products")
     .select("id, name, price, category, stock, image_url, created_at")
     .order("created_at", { ascending: false });
+
+  if (error && usingServiceRole) {
+    const retry = await supabase
+      .from("products")
+      .select("id, name, price, category, stock, image_url, created_at")
+      .order("created_at", { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -103,7 +116,7 @@ export async function GET() {
 }
 
 export async function PATCH(request) {
-  const { admin, error: authError } = await requireActiveAdmin();
+  const { db, supabase, usingServiceRole, error: authError } = await requireActiveAdmin();
   if (authError) return authError;
 
   const body = await request.json().catch(() => ({}));
@@ -118,12 +131,23 @@ export async function PATCH(request) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  const { data, error: updateError } = await admin
+  let { data, error: updateError } = await db
     .from("products")
     .update(product)
     .eq("id", id)
     .select()
     .single();
+
+  if (updateError && usingServiceRole) {
+    const retry = await supabase
+      .from("products")
+      .update(product)
+      .eq("id", id)
+      .select()
+      .single();
+    data = retry.data;
+    updateError = retry.error;
+  }
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 400 });
@@ -133,7 +157,7 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
-  const { admin, error: authError } = await requireActiveAdmin();
+  const { db, supabase, usingServiceRole, error: authError } = await requireActiveAdmin();
   if (authError) return authError;
 
   const { id } = await request.json().catch(() => ({}));
@@ -142,7 +166,12 @@ export async function DELETE(request) {
     return NextResponse.json({ error: "Product id ayaa maqan." }, { status: 400 });
   }
 
-  const { error } = await admin.from("products").delete().eq("id", id);
+  let { error } = await db.from("products").delete().eq("id", id);
+
+  if (error && usingServiceRole) {
+    const retry = await supabase.from("products").delete().eq("id", id);
+    error = retry.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

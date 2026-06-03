@@ -26,7 +26,6 @@ async function ensureBucket(admin) {
 
 export async function POST(request) {
   const supabase = await createClient();
-  const admin = createAdminClient();
 
   const {
     data: { user },
@@ -35,6 +34,20 @@ export async function POST(request) {
   if (!user) {
     return NextResponse.json({ error: "Login ayaa loo baahan yahay." }, { status: 401 });
   }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, status")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile || profile.role !== "admin" || profile.status !== "active") {
+    return NextResponse.json({ error: "Admin access ayaa loo baahan yahay." }, { status: 403 });
+  }
+
+  const storageClient = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdminClient()
+    : supabase;
 
   const formData = await request.formData();
   const file = formData.get("file");
@@ -51,13 +64,15 @@ export async function POST(request) {
     return NextResponse.json({ error: "Image-ku waa inuu ka yaraadaa 5MB." }, { status: 400 });
   }
 
-  await ensureBucket(admin);
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await ensureBucket(storageClient);
+  }
 
   const safeName = cleanFileName(file.name) || "product-image";
   const extension = safeName.includes(".") ? safeName.split(".").pop() : "jpg";
   const path = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
-  const { error } = await admin.storage.from(BUCKET_NAME).upload(path, file, {
+  const { error } = await storageClient.storage.from(BUCKET_NAME).upload(path, file, {
     contentType: file.type,
     upsert: false,
   });
@@ -69,7 +84,7 @@ export async function POST(request) {
 
   const {
     data: { publicUrl },
-  } = admin.storage.from(BUCKET_NAME).getPublicUrl(path);
+  } = storageClient.storage.from(BUCKET_NAME).getPublicUrl(path);
 
   return NextResponse.json({ url: publicUrl });
 }

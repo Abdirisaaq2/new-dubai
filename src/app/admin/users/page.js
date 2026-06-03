@@ -203,28 +203,46 @@ export default async function AdminUsersPage() {
   const isMainAdmin = currentEmail === MAIN_ADMIN_EMAIL.toLowerCase();
   const currentAdminCanManage = isMainAdmin;
 
-  const supabaseAdmin = createAdminClient();
+  const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdminClient()
+    : supabase;
 
-  const { data: profiles, error } = await supabaseAdmin
+  let { data: profiles, error } = await db
     .from("profiles")
     .select(
       "id, username, email, phone, gender, role, status, created_at"
     )
     .order("created_at", { ascending: false });
 
-  const { data: authUsersData, error: authUsersError } =
-    await supabaseAdmin.auth.admin.listUsers({
+  if (error && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const retry = await supabase
+      .from("profiles")
+      .select(
+        "id, username, email, phone, gender, role, status, created_at"
+      )
+      .order("created_at", { ascending: false });
+    profiles = retry.data;
+    error = retry.error;
+  }
+
+  let authUsersData = { users: [] };
+
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { data } = await db.auth.admin.listUsers({
       page: 1,
       perPage: 1000,
     });
 
-  if (error || authUsersError) {
+    authUsersData = data || { users: [] };
+  }
+
+  if (error) {
     return (
       <main className="admin-users-page responsive-admin-page" style={styles.page}>
         <section style={styles.errorBox}>
           <h1 style={styles.errorTitle}>Failed to load users</h1>
           <p style={styles.errorText}>
-            {error?.message || authUsersError?.message}
+            {error.message}
           </p>
           <Link href="/admin" style={styles.backHome}>
             <ArrowLeft size={18} />
