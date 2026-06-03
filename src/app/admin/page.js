@@ -79,16 +79,24 @@ export default async function AdminPage() {
     .from("products")
     .select("*", { count: "exact", head: true });
 
-  const supabaseAdmin = createAdminClient();
+  let profilesForCounts = [];
+  let authUsersData = { users: [] };
 
-  const { data: profilesForCounts } = await supabaseAdmin
-    .from("profiles")
-    .select("id, role");
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const supabaseAdmin = createAdminClient();
 
-  const { data: authUsersData } = await supabaseAdmin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
+    const { data: profilesData } = await supabaseAdmin
+      .from("profiles")
+      .select("id, role");
+
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+
+    profilesForCounts = profilesData || [];
+    authUsersData = usersData || { users: [] };
+  }
 
   const roleById = new Map(
     (profilesForCounts || []).map((item) => [item.id, item.role || "user"])
